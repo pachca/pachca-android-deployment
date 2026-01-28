@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -133,6 +135,8 @@ func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *
 		return 0, err
 	}
 
+	log.Printf("Build data: job_id=%d, version_code=%d, version_name=%s", buildData.JobID, buildData.VersionCode, buildData.VersionName)
+
 	content := fmt.Sprintf(
 		"Release %s (%d) uploaded to Google Play Internal. Built by job %d.",
 		buildData.VersionName, buildData.VersionCode, buildData.JobID,
@@ -157,6 +161,8 @@ func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *
 		return 0, err
 	}
 
+	log.Printf("Sending to Pachca: %s", string(payloadBytes))
+
 	req, err := http.NewRequestWithContext(ctx, "POST", config.PachcaBaseURL+"/messages", bytes.NewReader(payloadBytes))
 	if err != nil {
 		return 0, err
@@ -172,7 +178,8 @@ func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("Pachca API returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("Pachca API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var response PachcaMessageResponse
