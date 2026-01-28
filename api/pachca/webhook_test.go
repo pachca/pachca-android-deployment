@@ -2,8 +2,8 @@ package handler
 
 import (
 	"testing"
-	"net/http"
-	"net/http/httptest"
+	//"net/http"
+	//"net/http/httptest"
 )
 
 func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {

@@ -12,7 +12,7 @@
 
 - **Gitlab** builds a release bundle and uploads it to Google Play internal track.
 - **This service** receives a hook from **Gitlab** with the result of upload, job id, versionCode and versionName of the build.
-- **This service** sends a message to **internal chat** in Pachca and pins it.
+- **This service** sends a message to **internal chat** a button "Promote release" in Pachca and pins it.
 
 
 ### "Promote build" message button is clicked in **internal chat** 

@@ -1,9 +1,9 @@
 package shared
 
 const (
-	PachcaUrl string = "ENV_PACHCA_URL"
-	GitlabUrl string = "ENV_GITLAB_URL"
-	LinearUrl string = "ENV_LINEAR_URL"
+	EnvPachcaUrl string = "ENV_PACHCA_URL"
+	EnvGitlabUrl string = "ENV_GITLAB_URL"
+	EnvLinearUrl string = "ENV_LINEAR_URL"
 
 	EnvPachcaKey string = "ENV_PACHCA_KEY"
 	EnvGitlabKey string = "ENV_GITLAB_KEY"
