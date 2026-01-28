@@ -207,7 +207,7 @@ func pinMessage(ctx context.Context, client *http.Client, config *Config, messag
 	respBody, _ := io.ReadAll(resp.Body)
 	log.Printf("Pachca pin response: %s", string(respBody))
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("Pachca pin API returned status %d", resp.StatusCode)
 	}
 

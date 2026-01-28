@@ -76,7 +76,7 @@ func TestGitlabNotifiesGooglePlayReleaseIsSuccessful(t *testing.T) {
 			if r.Method != "POST" {
 				t.Errorf("Expected POST method, got %s", r.Method)
 			}
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusCreated)
 		default:
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
