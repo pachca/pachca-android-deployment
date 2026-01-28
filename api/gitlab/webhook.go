@@ -43,7 +43,6 @@ type PachcaMessageRequest struct {
 
 type PachcaButton struct {
 	Text string `json:"text"`
-	URL  string `json:"url"`
 	Data string `json:"data"`
 }
 
