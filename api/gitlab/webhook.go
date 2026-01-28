@@ -48,21 +48,7 @@ type PachcaButton struct {
 
 type PachcaMessageResponse struct {
 	Data struct {
-		ID               int     `json:"id"`
-		EntityType       string  `json:"entity_type"`
-		EntityID         int     `json:"entity_id"`
-		ChatID           int     `json:"chat_id"`
-		Content          string  `json:"content"`
-		UserID           int     `json:"user_id"`
-		CreatedAt        string  `json:"created_at"`
-		URL              string  `json:"url"`
-		Files            []any   `json:"files"`
-		Buttons          []any   `json:"buttons"`
-		Thread           *any    `json:"thread"`
-		Forwarding       *any    `json:"forwarding"`
-		ParentMessageID  *int    `json:"parent_message_id"`
-		DisplayAvatarURL *string `json:"display_avatar_url"`
-		DisplayName      *string `json:"display_name"`
+		ID int `json:"id"`
 	} `json:"data"`
 }
 
@@ -73,12 +59,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 func HandleGitlabHook(w http.ResponseWriter, r *http.Request, client *http.Client) {
 	config, err := NewConfig()
 	if err != nil {
+		log.Printf("Config error: %s", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	bodyBytes, _ := io.ReadAll(r.Body)
+	log.Printf("Incoming Gitlab payload: %s", string(bodyBytes))
+
 	var payload GitlabPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
@@ -88,16 +78,13 @@ func HandleGitlabHook(w http.ResponseWriter, r *http.Request, client *http.Clien
 		return
 	}
 
-	messageID, err := HandleGitlabBuildSuccess(r.Context(), client, config, payload.Data)
+	err = HandleGitlabBuildSuccess(r.Context(), client, config, payload.Data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	response := map[string]interface{}{
-		"message_id": messageID,
-	}
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusOK)
 }
 
 func NewConfig() (*Config, error) {
@@ -128,13 +115,11 @@ func NewConfig() (*Config, error) {
 	}, nil
 }
 
-func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *Config, data json.RawMessage) (int, error) {
+func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *Config, data json.RawMessage) error {
 	var buildData GitlabBuildData
 	if err := json.Unmarshal(data, &buildData); err != nil {
-		return 0, err
+		return err
 	}
-
-	log.Printf("Build data: job_id=%d, version_code=%d, version_name=%s", buildData.JobID, buildData.VersionCode, buildData.VersionName)
 
 	content := fmt.Sprintf(
 		"Release %s (%d) uploaded to Google Play Internal. Built by job %d.",
@@ -155,12 +140,25 @@ func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *
 	messageReq.Message.Content = content
 	messageReq.Message.Buttons = buttons
 
+	messageID, err := sendMessage(ctx, client, config, messageReq)
+	if err != nil {
+		return err
+	}
+
+	if err := pinMessage(ctx, client, config, messageID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func sendMessage(ctx context.Context, client *http.Client, config *Config, messageReq PachcaMessageRequest) (int, error) {
 	payloadBytes, err := json.Marshal(messageReq)
 	if err != nil {
 		return 0, err
 	}
 
-	log.Printf("Sending to Pachca: %s", string(payloadBytes))
+	log.Printf("Outgoing Pachca payload: %s", string(payloadBytes))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", config.PachcaBaseURL+"/messages", bytes.NewReader(payloadBytes))
 	if err != nil {
@@ -176,15 +174,42 @@ func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return 0, fmt.Errorf("Pachca API returned status %d: %s", resp.StatusCode, string(body))
+	respBody, _ := io.ReadAll(resp.Body)
+	log.Printf("Pachca response: %s", string(respBody))
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("Pachca API returned status %d", resp.StatusCode)
 	}
 
-	var response PachcaMessageResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	var messageResp PachcaMessageResponse
+	if err := json.Unmarshal(respBody, &messageResp); err != nil {
 		return 0, err
 	}
 
-	return response.Data.ID, nil
+	return messageResp.Data.ID, nil
+}
+
+func pinMessage(ctx context.Context, client *http.Client, config *Config, messageID int) error {
+	url := fmt.Sprintf("%s/messages/%d/pin", config.PachcaBaseURL, messageID)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+config.PachcaAPIKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	log.Printf("Pachca pin response: %s", string(respBody))
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Pachca pin API returned status %d", resp.StatusCode)
+	}
+
+	return nil
 }
