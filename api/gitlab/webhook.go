@@ -3,9 +3,11 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"pachca.com/android-deployment/shared"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
+	println(shared.EnvGitlabKey)
 	HandleGitlabHook(w, r, http.DefaultClient)
 }
 
