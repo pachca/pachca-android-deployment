@@ -32,9 +32,10 @@ type ButtonAction struct {
 }
 
 type PachcaViewRequest struct {
-	Type      string `json:"type"`
-	TriggerID string `json:"trigger_id"`
-	View      View   `json:"view"`
+	Type            string `json:"type"`
+	TriggerID       string `json:"trigger_id"`
+	PrivateMetadata string `json:"private_metadata"`
+	View            View   `json:"view"`
 }
 
 type View struct {
@@ -143,8 +144,9 @@ func parseButtonData(data string) (*ButtonAction, error) {
 
 func openPromoteForm(ctx context.Context, client *http.Client, config *Config, triggerID string, jobID int) error {
 	viewReq := PachcaViewRequest{
-		Type:      "view",
-		TriggerID: triggerID,
+		Type:            "modal",
+		TriggerID:       triggerID,
+		PrivateMetadata: fmt.Sprintf("%d", jobID),
 		View: View{
 			Title: "Promote Release",
 			Blocks: []ViewBlock{

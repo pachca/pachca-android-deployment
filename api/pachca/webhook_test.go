@@ -30,8 +30,12 @@ func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {
 				t.Error("Expected trigger_id to be non-empty")
 			}
 
-			if viewReq.Type != "view" {
-				t.Errorf("Expected type 'view', got '%s'", viewReq.Type)
+			if viewReq.Type != "modal" {
+				t.Errorf("Expected type 'modal', got '%s'", viewReq.Type)
+			}
+
+			if viewReq.PrivateMetadata != "12345" {
+				t.Errorf("Expected private_metadata '12345', got '%s'", viewReq.PrivateMetadata)
 			}
 
 			if viewReq.View.Title != "Promote Release" {
