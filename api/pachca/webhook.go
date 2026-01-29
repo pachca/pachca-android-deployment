@@ -32,6 +32,7 @@ type ButtonAction struct {
 }
 
 type PachcaViewRequest struct {
+	Type      string `json:"type"`
 	TriggerID string `json:"trigger_id"`
 	View      View   `json:"view"`
 }
@@ -142,6 +143,7 @@ func parseButtonData(data string) (*ButtonAction, error) {
 
 func openPromoteForm(ctx context.Context, client *http.Client, config *Config, triggerID string, jobID int) error {
 	viewReq := PachcaViewRequest{
+		Type:      "view",
 		TriggerID: triggerID,
 		View: View{
 			Title: "Promote Release",

@@ -30,6 +30,10 @@ func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {
 				t.Error("Expected trigger_id to be non-empty")
 			}
 
+			if viewReq.Type != "view" {
+				t.Errorf("Expected type 'view', got '%s'", viewReq.Type)
+			}
+
 			if viewReq.View.Title != "Promote Release" {
 				t.Errorf("Expected title 'Promote Release', got '%s'", viewReq.View.Title)
 			}
