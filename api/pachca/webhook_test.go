@@ -34,8 +34,8 @@ func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {
 				t.Errorf("Expected type 'modal', got '%s'", viewReq.Type)
 			}
 
-			if viewReq.PrivateMetadata != "12345" {
-				t.Errorf("Expected private_metadata '12345', got '%s'", viewReq.PrivateMetadata)
+			if viewReq.CallbackID != "promote" {
+				t.Errorf("Expected callback_id 'promote', got '%s'", viewReq.CallbackID)
 			}
 
 			if viewReq.View.Title != "Promote Release" {
@@ -49,8 +49,10 @@ func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {
 			if viewReq.View.Blocks[0].Type != "header" {
 				t.Errorf("Expected block[0] type 'header', got '%s'", viewReq.View.Blocks[0].Type)
 			}
-			if viewReq.View.Blocks[0].Text == "" {
-				t.Error("Expected header text to be non-empty")
+
+			expectedHeader := "Promote 1.0.1 (1001) from job 12345"
+			if viewReq.View.Blocks[0].Text != expectedHeader {
+				t.Errorf("Expected header '%s', got '%s'", expectedHeader, viewReq.View.Blocks[0].Text)
 			}
 
 			rolloutBlock := viewReq.View.Blocks[1]
@@ -93,6 +95,20 @@ func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {
 				t.Errorf("Expected release_notes max_length 500, got %d", notesBlock.MaxLength)
 			}
 
+			var privateMeta shared.ReleaseInfo
+			if err := json.Unmarshal([]byte(viewReq.PrivateMetadata), &privateMeta); err != nil {
+				t.Errorf("Failed to unmarshal private_metadata: %v", err)
+			}
+			if privateMeta.JobID != 12345 {
+				t.Errorf("Expected private_metadata job_id 12345, got %d", privateMeta.JobID)
+			}
+			if privateMeta.VersionCode != 1001 {
+				t.Errorf("Expected private_metadata version_code 1001, got %d", privateMeta.VersionCode)
+			}
+			if privateMeta.VersionName != "1.0.1" {
+				t.Errorf("Expected private_metadata version_name '1.0.1', got '%s'", privateMeta.VersionName)
+			}
+
 			w.WriteHeader(http.StatusOK)
 		default:
 			t.Errorf("Unexpected path: %s", r.URL.Path)
@@ -107,7 +123,7 @@ func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {
 		"type":       "button",
 		"event":      "click",
 		"trigger_id": "550e8400-e29b-41d4-a716-446655440000",
-		"data":       "promote:12345",
+		"data":       "promote|{\"job_id\":12345,\"version_code\":1001,\"version_name\":\"1.0.1\"}",
 		"message_id": 194275,
 		"user_id":    123,
 		"chat_id":    198,

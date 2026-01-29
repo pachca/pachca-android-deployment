@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -63,6 +64,23 @@ func TestGitlabNotifiesGooglePlayReleaseIsSuccessful(t *testing.T) {
 			}
 			if msg.Message.Buttons[0][0].Text != "Promote release" {
 				t.Errorf("Expected button text 'Promote release', got '%s'", msg.Message.Buttons[0][0].Text)
+			}
+			buttonData := msg.Message.Buttons[0][0].Data
+			if !strings.HasPrefix(buttonData, "promote|") {
+				t.Errorf("Expected button data to start with 'promote|', got '%s'", buttonData)
+			}
+			var releaseInfo shared.ReleaseInfo
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(buttonData, "promote|")), &releaseInfo); err != nil {
+				t.Errorf("Failed to unmarshal button data: %v", err)
+			}
+			if releaseInfo.JobID != 12345 {
+				t.Errorf("Expected button data job_id 12345, got %d", releaseInfo.JobID)
+			}
+			if releaseInfo.VersionCode != 1001 {
+				t.Errorf("Expected button data version_code 1001, got %d", releaseInfo.VersionCode)
+			}
+			if releaseInfo.VersionName != "1.0.1" {
+				t.Errorf("Expected button data version_name '1.0.1', got '%s'", releaseInfo.VersionName)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]any{

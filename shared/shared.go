@@ -1,5 +1,11 @@
 package shared
 
+type ReleaseInfo struct {
+	JobID       int    `json:"job_id"`
+	VersionCode int    `json:"version_code"`
+	VersionName string `json:"version_name"`
+}
+
 const (
 	EnvPachcaUrl string = "ENV_PACHCA_URL"
 	EnvGitlabUrl string = "ENV_GITLAB_URL"

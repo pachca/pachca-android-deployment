@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	"pachca.com/android-deployment/shared"
@@ -26,14 +25,10 @@ type PachcaButtonWebhookPayload struct {
 	WebhookTimestamp int    `json:"webhook_timestamp"`
 }
 
-type ButtonAction struct {
-	Action string
-	JobID  int
-}
-
 type PachcaViewRequest struct {
 	Type            string `json:"type"`
 	TriggerID       string `json:"trigger_id"`
+	CallbackID      string `json:"callback_id"`
 	PrivateMetadata string `json:"private_metadata"`
 	View            View   `json:"view"`
 }
@@ -87,18 +82,18 @@ func HandlePachcaHook(w http.ResponseWriter, r *http.Request, client *http.Clien
 		return
 	}
 
-	action, err := parseButtonData(payload.Data)
+	releaseInfo, err := parseButtonData(payload.Data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if action.Action != "promote" {
+	if releaseInfo.JobID == 0 {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	err = openPromoteForm(r.Context(), client, config, payload.TriggerID, action.JobID)
+	err = openPromoteForm(r.Context(), client, config, payload.TriggerID, releaseInfo)
 	if err != nil {
 		log.Printf("Error opening promote form: %s", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -125,34 +120,34 @@ func NewConfig() (*Config, error) {
 	}, nil
 }
 
-func parseButtonData(data string) (*ButtonAction, error) {
-	parts := strings.SplitN(data, ":", 2)
-	if len(parts) != 2 {
+func parseButtonData(data string) (*shared.ReleaseInfo, error) {
+	parts := strings.SplitN(data, "|", 2)
+	if len(parts) != 2 || parts[0] != "promote" {
 		return nil, fmt.Errorf("invalid button data format")
 	}
 
-	jobID, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("invalid job ID")
+	var releaseInfo shared.ReleaseInfo
+	if err := json.Unmarshal([]byte(parts[1]), &releaseInfo); err != nil {
+		return nil, fmt.Errorf("invalid button data json")
 	}
 
-	return &ButtonAction{
-		Action: parts[0],
-		JobID:  jobID,
-	}, nil
+	return &releaseInfo, nil
 }
 
-func openPromoteForm(ctx context.Context, client *http.Client, config *Config, triggerID string, jobID int) error {
+func openPromoteForm(ctx context.Context, client *http.Client, config *Config, triggerID string, releaseInfo *shared.ReleaseInfo) error {
+	privateMetadata, _ := json.Marshal(releaseInfo)
+
 	viewReq := PachcaViewRequest{
 		Type:            "modal",
 		TriggerID:       triggerID,
-		PrivateMetadata: fmt.Sprintf("%d", jobID),
+		CallbackID:      "promote",
+		PrivateMetadata: string(privateMetadata),
 		View: View{
 			Title: "Promote Release",
 			Blocks: []ViewBlock{
 				{
 					Type: "header",
-					Text: fmt.Sprintf("Promote release from job %d", jobID),
+					Text: fmt.Sprintf("Promote %s (%d) from job %d", releaseInfo.VersionName, releaseInfo.VersionCode, releaseInfo.JobID),
 				},
 				{
 					Type:        "input",

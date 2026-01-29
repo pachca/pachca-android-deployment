@@ -21,9 +21,7 @@ type GitlabPayload struct {
 }
 
 type GitlabBuildData struct {
-	JobID       int    `json:"job_id"`
-	VersionCode int    `json:"version_code"`
-	VersionName string `json:"version_name"`
+	shared.ReleaseInfo
 }
 
 type Config struct {
@@ -126,10 +124,17 @@ func HandleGitlabBuildSuccess(ctx context.Context, client *http.Client, config *
 		buildData.VersionName, buildData.VersionCode, buildData.JobID,
 	)
 
+	releaseInfo := shared.ReleaseInfo{
+		JobID:       buildData.JobID,
+		VersionCode: buildData.VersionCode,
+		VersionName: buildData.VersionName,
+	}
+	releaseInfoJSON, _ := json.Marshal(releaseInfo)
+
 	button := []PachcaButton{
 		{
 			Text: "Promote release",
-			Data: fmt.Sprintf("promote:%d", buildData.JobID),
+			Data: fmt.Sprintf("promote|%s", string(releaseInfoJSON)),
 		},
 	}
 	buttons := [][]PachcaButton{button}
