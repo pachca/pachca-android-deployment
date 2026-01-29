@@ -145,7 +145,165 @@ func TestPachcaNotifiesPromoteBuildButtonClicked(t *testing.T) {
 }
 
 func TestPachcaNotifiesPromoteBuildFormFilled(t *testing.T) {
+	t.Run("successful submission", func(t *testing.T) {
+		mockPachca := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer mockPachca.Close()
 
+		t.Setenv(shared.EnvPachcaUrl, mockPachca.URL)
+		t.Setenv(shared.EnvPachcaKey, "test-api-key")
+
+		submitPayload := map[string]any{
+			"type":             "view",
+			"event":            "submit",
+			"callback_id":      "promote",
+			"private_metadata": "{\"job_id\":12345,\"version_code\":1001,\"version_name\":\"1.0.1\"}",
+			"user_id":          123,
+			"data": map[string]any{
+				"rollout_percentage": "25",
+				"release_notes":      "Bug fixes and improvements",
+			},
+			"webhook_timestamp": 1755075544,
+		}
+		payloadBytes, _ := json.Marshal(submitPayload)
+
+		req := httptest.NewRequest("POST", "/pachca/webhook", bytes.NewReader(payloadBytes))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		HandlePachcaHook(w, req, mockPachca.Client())
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("validation error - invalid rollout percentage", func(t *testing.T) {
+		mockPachca := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer mockPachca.Close()
+
+		t.Setenv(shared.EnvPachcaUrl, mockPachca.URL)
+		t.Setenv(shared.EnvPachcaKey, "test-api-key")
+
+		submitPayload := map[string]any{
+			"type":             "view",
+			"event":            "submit",
+			"callback_id":      "promote",
+			"private_metadata": "{\"job_id\":12345,\"version_code\":1001,\"version_name\":\"1.0.1\"}",
+			"user_id":          123,
+			"data": map[string]any{
+				"rollout_percentage": "150",
+				"release_notes":      "Bug fixes",
+			},
+			"webhook_timestamp": 1755075544,
+		}
+		payloadBytes, _ := json.Marshal(submitPayload)
+
+		req := httptest.NewRequest("POST", "/pachca/webhook", bytes.NewReader(payloadBytes))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		HandlePachcaHook(w, req, mockPachca.Client())
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", w.Code)
+		}
+
+		var resp FormValidationErrorsResponse
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		if resp.Errors["rollout_percentage"] != "Rollout percentage must be between 0 and 100" {
+			t.Errorf("Expected rollout error message, got '%s'", resp.Errors["rollout_percentage"])
+		}
+	})
+
+	t.Run("validation error - missing release notes", func(t *testing.T) {
+		mockPachca := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer mockPachca.Close()
+
+		t.Setenv(shared.EnvPachcaUrl, mockPachca.URL)
+		t.Setenv(shared.EnvPachcaKey, "test-api-key")
+
+		submitPayload := map[string]any{
+			"type":             "view",
+			"event":            "submit",
+			"callback_id":      "promote",
+			"private_metadata": "{\"job_id\":12345,\"version_code\":1001,\"version_name\":\"1.0.1\"}",
+			"user_id":          123,
+			"data": map[string]any{
+				"rollout_percentage": "25",
+				"release_notes":      "",
+			},
+			"webhook_timestamp": 1755075544,
+		}
+		payloadBytes, _ := json.Marshal(submitPayload)
+
+		req := httptest.NewRequest("POST", "/pachca/webhook", bytes.NewReader(payloadBytes))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		HandlePachcaHook(w, req, mockPachca.Client())
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", w.Code)
+		}
+
+		var resp FormValidationErrorsResponse
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		if resp.Errors["release_notes"] != "Release notes are required" {
+			t.Errorf("Expected release notes error message, got '%s'", resp.Errors["release_notes"])
+		}
+	})
+
+	t.Run("validation error - multiple errors", func(t *testing.T) {
+		mockPachca := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer mockPachca.Close()
+
+		t.Setenv(shared.EnvPachcaUrl, mockPachca.URL)
+		t.Setenv(shared.EnvPachcaKey, "test-api-key")
+
+		submitPayload := map[string]any{
+			"type":             "view",
+			"event":            "submit",
+			"callback_id":      "promote",
+			"private_metadata": "{\"job_id\":12345,\"version_code\":1001,\"version_name\":\"1.0.1\"}",
+			"user_id":          123,
+			"data": map[string]any{
+				"rollout_percentage": "150",
+				"release_notes":      "",
+			},
+			"webhook_timestamp": 1755075544,
+		}
+		payloadBytes, _ := json.Marshal(submitPayload)
+
+		req := httptest.NewRequest("POST", "/pachca/webhook", bytes.NewReader(payloadBytes))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		HandlePachcaHook(w, req, mockPachca.Client())
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", w.Code)
+		}
+
+		var resp FormValidationErrorsResponse
+		json.NewDecoder(w.Body).Decode(&resp)
+
+		if resp.Errors["rollout_percentage"] != "Rollout percentage must be between 0 and 100" {
+			t.Errorf("Expected rollout error message, got '%s'", resp.Errors["rollout_percentage"])
+		}
+		if resp.Errors["release_notes"] != "Release notes are required" {
+			t.Errorf("Expected release notes error message, got '%s'", resp.Errors["release_notes"])
+		}
+	})
 }
 
 func TestPachcaNotifiesUpdateRolloutButtonClicked(t *testing.T) {

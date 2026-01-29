@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"pachca.com/android-deployment/shared"
@@ -23,6 +24,16 @@ type PachcaButtonWebhookPayload struct {
 	UserID           int    `json:"user_id"`
 	ChatID           int    `json:"chat_id"`
 	WebhookTimestamp int    `json:"webhook_timestamp"`
+}
+
+type PachcaViewSubmitPayload struct {
+	Type             string         `json:"type"`
+	Event            string         `json:"event"`
+	PrivateMetadata  string         `json:"private_metadata"`
+	CallbackID       string         `json:"callback_id"`
+	UserID           int            `json:"user_id"`
+	Data             map[string]any `json:"data"`
+	WebhookTimestamp int            `json:"webhook_timestamp"`
 }
 
 type PachcaViewRequest struct {
@@ -51,6 +62,15 @@ type ViewBlock struct {
 	Hint        string `json:"hint,omitempty"`
 }
 
+type FormValidationErrorsResponse struct {
+	Errors map[string]string `json:"errors"`
+}
+
+type PromoteFormData struct {
+	RolloutPercentage int
+	ReleaseNotes      string
+}
+
 type Config struct {
 	PachcaBaseURL string
 	PachcaAPIKey  string
@@ -71,14 +91,33 @@ func HandlePachcaHook(w http.ResponseWriter, r *http.Request, client *http.Clien
 	bodyBytes, _ := io.ReadAll(r.Body)
 	log.Printf("Incoming Pachca payload: %s", string(bodyBytes))
 
-	var payload PachcaButtonWebhookPayload
-	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+	var basePayload struct {
+		Type  string `json:"type"`
+		Event string `json:"event"`
+	}
+	if err := json.Unmarshal(bodyBytes, &basePayload); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
 
-	if payload.Type != "button" || payload.Event != "click" {
+	switch basePayload.Type {
+	case "button":
+		if basePayload.Event == "click" {
+			handleButtonClick(w, r, client, config, bodyBytes)
+		}
+	case "view":
+		if basePayload.Event == "submit" {
+			handleViewSubmit(w, r, client, config, bodyBytes)
+		}
+	default:
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func handleButtonClick(w http.ResponseWriter, r *http.Request, client *http.Client, config *Config, bodyBytes []byte) {
+	var payload PachcaButtonWebhookPayload
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
 
@@ -101,6 +140,69 @@ func HandlePachcaHook(w http.ResponseWriter, r *http.Request, client *http.Clien
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func handleViewSubmit(w http.ResponseWriter, r *http.Request, client *http.Client, config *Config, bodyBytes []byte) {
+	var payload PachcaViewSubmitPayload
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	if payload.CallbackID != "promote" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	var releaseInfo shared.ReleaseInfo
+	if err := json.Unmarshal([]byte(payload.PrivateMetadata), &releaseInfo); err != nil {
+		http.Error(w, "Invalid private_metadata", http.StatusBadRequest)
+		return
+	}
+
+	errors := validatePromoteForm(payload.Data)
+	if len(errors) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(FormValidationErrorsResponse{Errors: errors})
+		return
+	}
+
+	var formData PromoteFormData
+	rolloutStr := payload.Data["rollout_percentage"].(string)
+	formData.RolloutPercentage, _ = strconv.Atoi(rolloutStr)
+	formData.ReleaseNotes = payload.Data["release_notes"].(string)
+
+	log.Printf("Promote form submitted: job=%d, version=%s (%d), rollout=%d%%, notes=%s",
+		releaseInfo.JobID, releaseInfo.VersionName, releaseInfo.VersionCode,
+		formData.RolloutPercentage, formData.ReleaseNotes)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func validatePromoteForm(data map[string]any) map[string]string {
+	errors := make(map[string]string)
+
+	rolloutStr, ok := data["rollout_percentage"].(string)
+	if !ok || rolloutStr == "" {
+		errors["rollout_percentage"] = "Rollout percentage is required"
+	} else {
+		rollout, err := strconv.Atoi(rolloutStr)
+		if err != nil {
+			errors["rollout_percentage"] = "Rollout percentage must be a number"
+		} else if rollout < 0 || rollout > 100 {
+			errors["rollout_percentage"] = "Rollout percentage must be between 0 and 100"
+		}
+	}
+
+	notes, ok := data["release_notes"].(string)
+	if !ok || notes == "" {
+		errors["release_notes"] = "Release notes are required"
+	} else if len(notes) > 500 {
+		errors["release_notes"] = "Release notes must be 500 characters or less"
+	}
+
+	return errors
 }
 
 func NewConfig() (*Config, error) {
